@@ -156,7 +156,7 @@ void DebugMon_Handler(void)
 
   /* USER CODE END DebugMonitor_IRQn 1 */
 }
- 
+
 /**
 * @brief This function handles Pendable request for system service.
 */
@@ -198,7 +198,6 @@ void SysTick_Handler(void)
 void TIM2_IRQHandler(void)
 {
   /* USER CODE BEGIN TIM2_IRQn 0 */
-
 	HAL_GPIO_TogglePin (Tx_clock_GPIO_Port , Tx_clock_Pin);	
   /* USER CODE END TIM2_IRQn 0 */
   HAL_TIM_IRQHandler(&htim2);
