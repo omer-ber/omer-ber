@@ -66,8 +66,9 @@ static uint8_t Tx_value = 0;
 static uint8_t Rx_clock_value ;
 static uint8_t Tx_clock_value ;
 static uint16_t t_data =0;
-static	uint8_t data=182;
+uint8_t data=0;
 
+uint8_t senders[] = {201,0,192,0,223};
 
 /* USER CODE END PV */
 
@@ -84,29 +85,29 @@ static void MX_TIM2_Init(void);
 /* USER CODE BEGIN 0 */
 void dll_TX()
 {
-
+	static int space=0;
 	if (!phy_tx_busy && !dll_to_phy_tx_bus_valid)
 	{
 		if (delay == 0)
 		{
 			
-			dll_to_phy_tx_bus = data; // random data
+			dll_to_phy_tx_bus = senders[space]; // takes diffrent data from the array in each run
 			dll_to_phy_tx_bus_valid =1; 
 			delay = 500; // input random number;
-			
+			space++;
 		}
 		else
 			delay --;
 	}
-	
+	space = space==5? 0:space; // reset the space if we finished all of the array
 }	
 	
 void dll_RX()
 {
 	if ( phy_to_dll_rx_bus_valid)
 	{
-		t_data = phy_to_dll_rx_bus;
-		phy_to_dll_rx_bus_valid =0;
+		t_data = phy_to_dll_rx_bus; // takes transferd data from the bus 
+		phy_to_dll_rx_bus_valid =0; // reset the valid that means that we took the data
 	}
 	
 }	
@@ -114,47 +115,47 @@ void dll_RX()
 
 void phy_Tx()
 {
-	static uint16_t shifter =1;
-	static uint8_t transfer = 0;
-	static uint8_t p_clock_val = 0;
-	static uint8_t temp=0;	
-	if(dll_to_phy_tx_bus_valid ){ 
+	static uint16_t shifter =1; // for the masking in order to iso the bit
+	static uint8_t transfer = 0; // var to the masked bit
+	static uint8_t p_clock_val = 0; // saves the prev clock value in order to check that we are in rising edge
+	static uint8_t temp=0;	// takes the data from the bus
+	if(dll_to_phy_tx_bus_valid ){  // checkes if we are in a new byte
 		temp = dll_to_phy_tx_bus;
 		phy_tx_busy = 1;
 		dll_to_phy_tx_bus_valid =0;
 		HAL_TIM_Base_Start(&htim2); //turn on timer
 		HAL_TIM_Base_Start_IT(&htim2);
 	}
-	Tx_clock_value = HAL_GPIO_ReadPin(Tx_clock_GPIO_Port, Tx_clock_Pin);
-	if (Tx_clock_value && (!p_clock_val)) // added previos clock check is 0 
+	Tx_clock_value = HAL_GPIO_ReadPin(Tx_clock_GPIO_Port, Tx_clock_Pin); // reads the current value of the clcok
+	if (Tx_clock_value && (!p_clock_val)) // checks if we are in a rising edge 
 	{
-		if (shifter ==1)
+		if (shifter ==1) // first bit
 		{
 	
 			transfer = ((dll_to_phy_tx_bus) &	(shifter));
 			if (transfer == shifter)
 			{
-				HAL_GPIO_WritePin (Tx_data_GPIO_Port, Tx_data_Pin, GPIO_PIN_SET);	
+				HAL_GPIO_WritePin (Tx_data_GPIO_Port, Tx_data_Pin, GPIO_PIN_SET);	//inserts one to the data
 				Tx_value =1;
 			}	
 			else
 			{
-				HAL_GPIO_WritePin (Tx_data_GPIO_Port, Tx_data_Pin, GPIO_PIN_RESET);
+				HAL_GPIO_WritePin (Tx_data_GPIO_Port, Tx_data_Pin, GPIO_PIN_RESET); // inserts zero to data 
 				Tx_value =0;
 			}
 			shifter = shifter*2;		
 		}
-		else if ( shifter > 128)
+		else if ( shifter > 128) // after the last bit
 		{
 			HAL_TIM_Base_Stop(&htim2); //turn off timer
-			HAL_TIM_Base_Stop_IT(&htim2);
+			HAL_TIM_Base_Stop_IT(&htim2); //turn off interupts
 			HAL_GPIO_WritePin(Tx_clock_GPIO_Port, Tx_clock_Pin ,GPIO_PIN_RESET); //set clock to zero
-			phy_tx_busy =0;
-			shifter =1;
+			phy_tx_busy =0; // reset busy
+			shifter =1; // reset the masker 
 		}
 		else
 		{	
-			transfer = ((dll_to_phy_tx_bus) &	(shifter));
+			transfer = ((dll_to_phy_tx_bus) &	(shifter)); // for the reset of the bits
 			if (transfer == shifter){
 				HAL_GPIO_WritePin (Tx_data_GPIO_Port, Tx_data_Pin, GPIO_PIN_SET);	
 				Tx_value =1;
@@ -172,13 +173,13 @@ void phy_Tx()
 void phy_Rx()
 {
 	
-	static uint16_t s_counter =0;
-	static uint8_t pr_clock_val=1;
-	Rx_clock_value = HAL_GPIO_ReadPin(Rx_clock_GPIO_Port, Rx_clock_Pin);
-	if ( (!Rx_clock_value) && pr_clock_val)
+	static uint16_t s_counter =0; // counter for inserting the number 
+	static uint8_t pr_clock_val=1; // prev clock
+	Rx_clock_value = HAL_GPIO_ReadPin(Rx_clock_GPIO_Port, Rx_clock_Pin); // reads the current clock value
+	if ( (!Rx_clock_value) && pr_clock_val) // checks that we are in falling edge
 	{
-		Rx_value = HAL_GPIO_ReadPin (Rx_data_GPIO_Port, Rx_data_Pin);
-		phy_to_dll_rx_bus += Rx_value << s_counter;	
+		Rx_value = HAL_GPIO_ReadPin (Rx_data_GPIO_Port, Rx_data_Pin); // reads the data from the pin
+		phy_to_dll_rx_bus += Rx_value << s_counter;	// moves the bit for the correct spot and inserts in to the bus
 		s_counter ++;
 	}
 	pr_clock_val = Rx_clock_value;
